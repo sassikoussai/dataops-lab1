@@ -1,6 +1,6 @@
-﻿# REPORT.md — TP guidé 1 : D'un script fragile à un pipeline testé
+# REPORT.md — TP guidé 1 : D'un script fragile à un pipeline testé
 
-**Binôme :** _(vos deux noms ici)_  
+**Binôme :** Koussay Sassi & Med Aziz Manaii  
 **Date :** 2026-10-23
 
 ---
