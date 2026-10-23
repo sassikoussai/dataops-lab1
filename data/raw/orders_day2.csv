@@ -1,7 +1,0 @@
-﻿order_id,order_date,customer_id,country,product,quantity,unit_price
-2001,2026-10-06,C009,Morocco,Office chair,4,44900
-2002,2026-10-06,C025,Tunisia,Monitor,2,22900
-2003,2026-10-06,C015,Italy,Webcam,2,3900
-2004,2026-10-06,C011,Germany,Headset,2,5950
-2005,2026-10-06,C031,Germany,Desk lamp,4,2900
-2006,2026-10-06,C007,Tunisia,Keyboard,3,4500
