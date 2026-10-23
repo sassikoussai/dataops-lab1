@@ -1,0 +1,7 @@
+﻿order_id,order_date,customer_id,country,product,quantity,price
+3001,2026-10-07,C026,Tunisia,Headset,4,59.5
+3002,2026-10-07,C034,Tunisia,Webcam,1,39.0
+3003,2026-10-07,C015,France,Monitor,1,229.0
+3004,2026-10-07,C014,Morocco,Webcam,2,39.0
+3005,2026-10-07,C005,Tunisia,Keyboard,4,45.0
+3006,2026-10-07,C004,Tunisia,Headset,3,59.5

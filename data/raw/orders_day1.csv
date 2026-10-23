@@ -1,0 +1,31 @@
+﻿order_id,order_date,customer_id,country,product,quantity,unit_price
+1001,2026-10-05,C036,Italy,Office chair,4,449.0
+1002,2026-10-05,C033,Italy,Office chair,2,449.0
+1003,2026-10-05,C033,France,Monitor,2,229.0
+1004,2026-10-05,C029,Tunisia,Mouse,-2,19.9
+1005,2026-10-05,C039,Morocco,Keyboard,4,45.0
+1006,2026-10-05,C040,tunisia,Monitor,1,229.0
+1007,2026-10-05,C003,Tunisia,Keyboard,2,45.0
+1008,2026-10-05,,Tunisia,Keyboard,2,45.0
+1009,2026-10-05,C019,France,Headset,1,59.5
+1010,2026-10-05,C018,France,Office chair,1,449.0
+1011,2026-10-05,C021,Italy,Webcam,3,39.0
+1012,2026-10-05,C005,France,Keyboard,1,45.0
+1013,2026-13-45,C007,Italy,Desk lamp,4,29.0
+1014,2026-10-05,C002,Italy,Mouse,1,19.9
+1015,2026-10-05,C014,Morocco,Headset,1,59.5
+1016,2026-10-05,C025,MOROCCO,Office chair,4,449.0
+1017,2026-10-05,C005,France,Desk lamp,2,29.0
+1018,2026-10-05,C022,Tunisia,Webcam,3,39.0
+1019,2026-10-05,C027,Italy,Keyboard,1,4500.0
+1020,2026-10-05,C016,Germany,Monitor,1,229.0
+1021,2026-10-05,C030,Italy,Keyboard,2,45.0
+1010,2026-10-05,C018,France,Office chair,1,449.0
+1022,2026-10-05,C029,France,Headset,2,59.5
+1023,2026-10-05,C025, Tunisia,Desk lamp,4,29.0
+1024,2026-10-05,C001,Tunisia,Headset,3,59.5
+1025,2026-10-05,C014,Tunisia,Keyboard,1,45.0
+1026,2026-10-05,C010,Tunisia,Keyboard,3,45.0
+1027,2026-10-05,C040,Tunisia,Keyboard,3,45.0
+1028,2026-10-05,C005,Tunisia,Desk lamp,2,29.0
+1029,2026-10-05,C001,Germany,Headset,3,59.5
