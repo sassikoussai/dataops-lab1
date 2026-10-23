@@ -65,3 +65,9 @@ def test_check_schema_stops_on_missing_column():
     orders = orders.rename(columns={"unit_price": "price"})
     with pytest.raises(DataQualityError):
         check_schema(orders)
+
+def test_unknown_country_is_rejected():
+    orders = make_orders([{"order_id": 1, "country": "Spain"}, {"order_id": 2, "country": "Italy"}])
+    clean, rejected = clean_orders(orders)
+    assert list(clean["order_id"]) == [2]
+    assert list(rejected["reject_reason"]) == ["unknown_country"]
