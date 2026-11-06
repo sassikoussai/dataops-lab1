@@ -1,166 +1,117 @@
-# REPORT.md — TP guidé 1 : D'un script fragile à un pipeline testé
+## TP3 — Du pipeline Python à l'ELT moderne avec DuckDB et dbt
 
-**Binôme :** Koussay Sassi & Med Aziz Manaii  
-**Date :** 2026-10-23
+**Résultat final (jour 1)** :
 
----
+```
+Done. PASS=14 WARN=0 ERROR=0 SKIP=0 NO-OP=0 REUSED=0 TOTAL=14
+```
 
-## Q1 — Pourquoi requirements.txt ?
-
-On écrit les bibliothèques dans equirements.txt au lieu de taper simplement
-pip install pandas parce que le fichier sert de **mémoire reproductible** du projet.
-N'importe qui (coéquipier, serveur CI, machine future) peut recréer exactement le même
-environnement en une seule commande pip install -r requirements.txt, sans avoir à
-se souvenir quelles bibliothèques installer ni dans quelle version.
-Sans ce fichier, les installations sont éphémères : elles ne sont pas versionnées,
-pas partagées, et le projet cesse de fonctionner dès qu'on change de machine.
+Total du rapport `revenue_by_country` : **8835.4**, identique à `run_pipeline.py`.
+Commit : `c80c59a Move the transformation to SQL with dbt and DuckDB`.
 
 ---
 
-## Q2 — Combien de lignes dans le rapport naïf ?
+### Étape 1 — Extract + Load
 
-Le rapport affiche **7 lignes** au lieu de 5.  
-Les raisons : 	unisia (minuscule) et MOROCCO (majuscules) sont traités comme des
-pays différents de Tunisia et Morocco. Le regroupement groupby est sensible à
-la casse, donc la même réalité géographique apparaît sous plusieurs orthographes.
+**Q1. Pourquoi charger toutes les colonnes en texte ?**
+Si DuckDB devine les types, il choisit `INTEGER` pour `quantity` d'après les premières lignes. Le jour où une quantité vaut « deux », le chargement lui-même plante et on n'a plus de brut dans l'entrepôt. En chargeant tout en `VARCHAR`, aucune ligne n'est refusée au chargement : les valeurs invalides (`-2`, `2026-13-45`, « deux ») arrivent telles quelles et c'est le SQL des couches suivantes qui décide, avec un motif de rejet explicite.
 
----
+**Q2. Le total naïf en SQL est aussi faux que celui de Python.**
+Le langage n'a aucune importance : SQL calcule aussi faussement que pandas si on ne vérifie rien (13950.6 au lieu de 8835.4). Ce qui rend un pipeline fiable, ce sont les règles de qualité, les tests et l'arrêt de la chaîne en cas de problème, pas le choix de l'outil.
 
-## Q3 — Cinq problèmes trouvés dans orders_day1.csv
-
-| order_id | Problème observé | Dimension de qualité |
-|----------|-----------------|----------------------|
-| 1004 | quantity = -2 (quantité négative) | **Validité** |
-| 1008 | customer_id vide | **Complétude** |
-| 1013 | order_date = 2026-13-45 (date impossible) | **Validité** |
-| 1019 | unit_price = 4500.0 (prix aberrant pour un clavier) | **Exactitude** |
-| 1006 | country = tunisia (casse incorrecte) | **Cohérence** |
-| 1016 | country = MOROCCO (casse incorrecte) | **Cohérence** |
-| 1010 | order_id 1010 apparaît deux fois (doublon) | **Unicité** |
-| 1023 | country = " Tunisia" (espace en tête) | **Cohérence** |
-
-_(Au moins cinq problèmes différents identifiés — plusieurs dimensions sont représentées.)_
+**Q3. Avantage d'avoir gardé le brut dans l'entrepôt.**
+Si une règle de nettoyage est fausse, on corrige le SQL et on recalcule tout depuis `raw.orders`, sans retourner chercher le fichier source. Le brut est aussi la preuve de ce qui a été reçu (avec `_source_file` et `_loaded_at`), donc on peut auditer et rejouer.
 
 ---
 
-## Q4 — Le total est-il trop haut ou trop bas ?
+### Étape 2 — Projet dbt
 
-On ne peut **pas le savoir avec certitude** sans recalculer à la main, car les erreurs
-jouent dans les deux sens :
-
-- Les erreurs qui **gonflent** le total : unit_price = 4500 pour un clavier (règle 4),
-  le doublon sur 1010 qui double une commande (règle 5).
-- Les erreurs qui **réduisent** le total : la quantité négative −2 × 19.9 = −39.8
-  est soustraite du total (règle 3).
-
-En pratique, le total naïf (12 771,10) est **trop élevé** par rapport au vrai total
-(7 655,90), mais on ne peut pas le deviner sans outiller les contrôles.
+**Q4. `profiles.yml` en entreprise (Snowflake, BigQuery).**
+Il faut changer `type` (`snowflake`, `bigquery`) et remplacer `path` par les paramètres de connexion (compte, utilisateur, base, schéma, entrepôt, rôle, ou projet et jeu de données). Le mot de passe ne doit jamais être écrit en clair dans le fichier ni commité : on le lit depuis une variable d'environnement (`{{ env_var('DBT_PASSWORD') }}`) alimentée par un gestionnaire de secrets (secrets CI, coffre-fort), comme vu à la séance 2.
 
 ---
 
-## Q5 — Avantages du découpage en fonctions
+### Étape 3 — Staging
 
-1. **Testabilité** : chaque fonction peut être testée indépendamment avec des données
-   synthétiques. On peut vérifier clean_orders sans lire un vrai fichier.
-2. **Lisibilité et maintenabilité** : chaque étape a une responsabilité claire et un nom
-   explicite (extract, alidate, 	ransform, load). Quand un bug apparaît, on sait
-   immédiatement dans quelle fonction chercher.
+**Q5. Pourquoi ne pas supprimer la commande 1013 dès le staging ?**
+Le staging type et répare, il ne juge pas. Si on supprimait la ligne ici, elle disparaîtrait sans trace, et on ne pourrait plus ni l'expliquer ni la corriger. Le rejet doit être explicite : la ligne reste, reçoit le motif `invalid_date` dans `int_orders_checked`, et finit en quarantaine dans `orders_rejected`.
 
----
-
-## Q6 — Bon total et erreur de l'ancien script
-
-- **Bon total :** 7 655,90 €
-- **Total naïf :** 12 771,10 €
-- **Écart :** +5 115,20 €
-- **En pourcentage :** (12771.10 − 7655.90) / 7655.90 ≈ +66,8 %
-
-L'ancien script **surestimait le chiffre d'affaires de presque 67 %**.
+**Q6. `stg_orders` est une vue.**
+Lire une vue relance son `select` sur `raw.orders` à chaque lecture : rien n'est stocké. C'est acceptable en staging car la transformation est légère (des casts et un nettoyage de texte), les données sont toujours fraîches et il n'y a pas de seconde copie à maintenir. Les marts, eux, sont des tables car ils sont lus par les utilisateurs.
 
 ---
 
-## Q7 — Commande principale responsable de l'erreur
+### Étape 4 — Les six règles et le rapport
 
-La commande **1019** (order_id 1019) : unit_price = 4500.0 pour un clavier
-au lieu de 45,0. Cela ajoute 4 455 € fictifs au total (4 500 − 45 = 4 455).  
-C'est la **règle 4** (invalid_unit_price, prix > MAX_UNIT_PRICE = 1000) qui l'a capturée.
+**Q7. Remplacement de `{{ ref('stg_orders') }}`.**
+Dans `target/compiled/shop/models/intermediate/int_orders_checked.sql`, dbt remplace `ref('stg_orders')` par le nom qualifié de la vue : `"warehouse"."main"."stg_orders"`. Le `ref()` sert donc à deux choses : produire le bon nom de table et fixer l'ordre de construction.
 
----
+**Q8. `row_number() over (partition by order_id order by _row_number)`.**
+La fonction regroupe les lignes par `order_id` et les numérote 1, 2, 3… dans l'ordre de `_row_number`. La ligne de rang 1 est la première apparition, les rangs supérieurs sont les doublons, d'où `> 1` pour la règle 5. C'est l'équivalent de `df.duplicated("order_id", keep="first")`. `_row_number` est nécessaire car SQL ne garantit aucun ordre de lecture : sans lui, « la première » n'aurait pas de sens et le résultat pourrait changer d'une exécution à l'autre.
 
-## Q8 — Pourquoi enregistrer les lignes rejetées ?
-
-On enregistre les lignes rejetées dans data/rejected/rejected_orders.csv plutôt que
-de simplement les supprimer pour trois raisons :
-
-1. **Traçabilité** : on peut auditer pourquoi une commande a été exclue du rapport.
-2. **Correction en amont** : l'équipe source peut identifier et corriger l'erreur dans
-   le système d'origine (ex. : le prix à 4 500 € est une faute de saisie à corriger).
-3. **Non-perte de données** : une ligne rejetée aujourd'hui peut être valide demain
-   après correction ; la supprimer serait irréversible.
+**Q9. Chiffre d'affaires par produit.**
+L'analyste crée `models/marts/revenue_by_product.sql`, un simple `select` avec `group by product` sur `{{ ref('orders_clean') }}`. Il n'a pas à toucher au Python : dbt déduit l'ordre grâce à `ref()` et le modèle apparaît dans le lignage.
 
 ---
 
-## Q9 — Que s'est-il passé quand on a cassé la règle 3 ?
+### Étape 5 — Tests de données et `dbt build`
 
-En remplaçant > 0 par > -5, les quantités négatives (ex. : −2) ne sont plus marquées
-comme invalides. Le test **	est_negative_quantity_is_rejected** a échoué :
-il attendait que la commande avec quantity = -2 soit dans ejected, mais elle
-se retrouvait dans clean. pytest affichait 1 failed, 4 passed.
+**Q10. Casser la règle 5.**
+Sans la règle 5, les doublons ne sont plus rejetés. *À COMPLÉTER avec ta sortie : noter quel test a échoué en premier (le test unitaire `test_duplicate_order_keeps_the_first` s'exécute avant le modèle, puis `unique_orders_clean_order_id` sur les vraies données) et la liste des `SKIP`.* Les modèles et tests en aval du test en échec (dont `revenue_by_country`) sont `SKIP`. C'est exactement ce que l'on veut : le rapport du directeur commercial n'est pas reconstruit avec de mauvaises données et la version de la veille reste en place.
 
----
+**Q11. Correspondances TP1 → dbt.**
 
-## Q10 — Test unitaire vs contrôle de données
-
-- **Test unitaire** : vérifie que la **logique du code** est correcte, en exécutant une
-  fonction sur un petit tableau fabriqué à la main dont on connaît déjà la bonne réponse.
-- **Contrôle de données** : vérifie que les **données réelles du jour** respectent les
-  règles métier, à chaque exécution du pipeline sur les vraies données.
-
----
-
-## Q11 — Tableau comparatif ancien script vs pipeline
-
-|  | Ancien script | Votre pipeline |
-|--|--------------|----------------|
-| **Jour 2 : message d'erreur ?** | Non — aucune erreur | Oui — PIPELINE STOPPED: Reject rate too high: 100% (6/6 rows rejected, limit is 20%) |
-| **Jour 2 : total affiché** | 543 500,00 (faux) | Aucun (pipeline arrêté) |
-| **Jour 3 : message d'erreur ?** | Non — aucune erreur (KeyError sur unit_price) | Oui — PIPELINE STOPPED: Missing columns: ['unit_price'] |
+| Contrôle du TP1 (Python) | Son équivalent dbt |
+|---|---|
+| `check_schema` | L'échec de `stg_orders` quand une colonne manque (erreur de liaison, vue au jour 3), et les tests génériques (`not_null`, `unique`, `accepted_values`) |
+| Les règles 1 à 6 dans `clean_orders` | Le `case when` de `int_orders_checked.sql` (la première règle vraie gagne) |
+| `check_reject_rate` | Le test singulier `assert_reject_rate_below_20_percent` |
+| `rejected_orders.csv` | Le modèle `orders_rejected` (table de quarantaine) |
+| `PIPELINE STOPPED`, rien n'est publié | `dbt build` échoue, les modèles en aval passent en `SKIP`, code de sortie 1 |
 
 ---
 
-## Q12 — Ce qui a changé dans le système source
+### Étape 6 — Test unitaire
 
-- **Jour 2** : Les prix ont été **multipliés par 100** (ex. : 449 → 44 900). C'est
-  probablement un changement d'unité dans le système source (centimes au lieu d'euros)
-  ou une erreur d'export. Toutes les lignes dépassent MAX_UNIT_PRICE = 1000.
-- **Jour 3** : La colonne unit_price a été **renommée price** dans le fichier
-  source. C'est une rupture de contrat de schéma (breaking schema change).
+**Q12. D'où venaient les données du test unitaire ?**
+Elles viennent du fichier YAML lui-même (le bloc `given` avec des lignes écrites à la main), pas de `load_raw.py` ni d'un CSV. En CI (séance 4), le test peut donc tourner sans entrepôt chargé ni fichier de données : il est rapide, reproductible et indépendant des données réelles. On teste uniquement la logique SQL.
 
 ---
 
-## Q13 — Jour le plus dangereux sans pipeline
+### Étape 7 — Lignage
 
-Le **jour 2** est le plus dangereux. Voici pourquoi :
-
-- Au jour 3, l'ancien script plante avec une KeyError sur unit_price : l'erreur
-  est visible, personne ne reçoit de chiffre.
-- Au jour 2, l'ancien script **ne plante pas** et affiche un total de 543 500 € au lieu
-  de quelques milliers. Le directeur commercial reçoit un chiffre **faux mais
-  plausible-looking**, sans aucun avertissement. C'est une erreur silencieuse :
-  la plus dangereuse car on la croit vraie.
+**Q13. `country` arrive vide dans la source.**
+Modèles touchés, en suivant le graphe : `stg_orders`, puis `int_orders_checked` (les lignes seraient rejetées en `unknown_country`), puis `orders_clean`, `orders_rejected` et `revenue_by_country`. Avec le graphe, la réponse prend quelques secondes (`+` / `stg_orders+`). Sans lui, dans un dossier de 200 scripts SQL, il faudrait ouvrir et lire chaque fichier pour retrouver les dépendances : plusieurs dizaines de minutes, avec un risque d'oubli.
 
 ---
 
-## Q14 — À quoi sert le code de sortie 1 ?
+### Étape 8 — Jours 2 et 3
 
-Le code de sortie 1 peut être utilisé par :
+**Q14. Comparaison des pipelines.**
 
-1. **Un orchestrateur** (ex. : Apache Airflow, cron, GitHub Actions) pour détecter
-   l'échec et déclencher une alerte ou stopper les tâches suivantes qui dépendraient
-   de ce rapport.
-2. **Un système de monitoring** pour envoyer une notification (email, Slack, PagerDuty)
-   à l'équipe data.
-3. **Un script shell** qui teste if [ True -ne 0 ]; then ... pour brancher un
-   comportement d'erreur.
-4. **Une pipeline CI/CD** (GitHub Actions) pour marquer le job comme échoué et bloquer
-   un déploiement.
+| | Pipeline Python (TP1) | Pipeline dbt (TP3) |
+|---|---|---|
+| Jour 2 : quel contrôle arrête la chaîne ? | `check_reject_rate` | Test `assert_reject_rate_below_20_percent` (`FAIL 1`), puis 9 étapes en `SKIP` |
+| Jour 3 : quel message d'erreur ? | À COMPLÉTER : message de `check_schema` au TP1 | `Binder Error: Table "src" does not have a column named "unit_price"`, `Candidate bindings: "price"` (13 étapes en `SKIP`) |
+| Le rapport de la veille est-il conservé ? | Oui, rien n'est écrit | Oui, `revenue_by_country` vaut toujours 8835.4 |
+| Code de sortie | À COMPLÉTER : valeur notée au TP1 (non nul) | 1 (vérifié avec `$LASTEXITCODE`) |
+
+Le jour 2 est arrêté par un test de données (données reçues mais mauvaises), le jour 3 par une erreur de construction (la structure du fichier a changé).
+
+**Q15. La quarantaine du jour 2.**
+Oui, c'est un problème : `orders_rejected` est en `SKIP`, donc elle contient encore les rejets du jour 1, alors que ce sont ceux du jour 2 qu'il faudrait examiner pour comprendre l'échec. Proposition : séparer la quarantaine du chemin qui mène au rapport. Deux façons :
+1. Construire la quarantaine **avant** le blocage : lancer `dbt run --select +orders_rejected` puis `dbt build` (dans un script ou en CI). La quarantaine du jour est publiée, le rapport reste bloqué.
+2. Restructurer les modèles pour que le test de taux de rejet ne bloque que `orders_clean` et ses descendants, et pas `orders_rejected`.
+
+On peut aussi garder l'historique des rejets en ajoutant `_source_file` dans la quarantaine, pour distinguer les jours.
+
+---
+
+### Étape 9 — Commit
+
+```
+c80c59a (HEAD -> main) Move the transformation to SQL with dbt and DuckDB
+d63a8ec Add DuckDB and dbt to requirements
+```
+
+`git status` : `working tree clean`. `warehouse.duckdb`, `target/` et `logs/` ne sont pas versionnés.
