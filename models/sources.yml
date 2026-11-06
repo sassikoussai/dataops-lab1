@@ -1,0 +1,8 @@
+version: 2
+
+sources:
+  - name: raw
+    description: Raw files, loaded as-is by load_raw.py
+    tables:
+      - name: orders
+        description: One row per line of the daily orders file, all columns as text

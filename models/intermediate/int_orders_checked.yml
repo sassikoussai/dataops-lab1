@@ -1,0 +1,28 @@
+version: 2
+
+unit_tests:
+  - name: test_unknown_country_is_rejected
+    description: An order from a country the shop does not sell to is rejected
+    model: int_orders_checked
+    given:
+      - input: ref('stg_orders')
+        rows:
+          - {order_id: 1, order_date: 2026-10-05, customer_id: C001, country: Spain, quantity: 1, unit_price: 10.0, _row_number: 1}
+          - {order_id: 2, order_date: 2026-10-05, customer_id: C002, country: Italy, quantity: 1, unit_price: 10.0, _row_number: 2}
+    expect:
+      rows:
+        - {order_id: 1, reject_reason: unknown_country}
+        - {order_id: 2, reject_reason: null}
+
+  - name: test_duplicate_order_keeps_the_first
+    description: When two rows share the same order_id, the first is kept and the second is rejected
+    model: int_orders_checked
+    given:
+      - input: ref('stg_orders')
+        rows:
+          - {order_id: 1, order_date: 2026-10-05, customer_id: C001, country: France, quantity: 1, unit_price: 10.0, _row_number: 1}
+          - {order_id: 1, order_date: 2026-10-05, customer_id: C001, country: France, quantity: 1, unit_price: 10.0, _row_number: 2}
+    expect:
+      rows:
+        - {_row_number: 1, reject_reason: null}
+        - {_row_number: 2, reject_reason: duplicate_order_id}
